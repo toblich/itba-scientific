@@ -15,7 +15,7 @@ dependencies:
   - cython
   - lxml
   - seaborn
-  - mkl
+  # - mkl
   - pyqt
   - altair
   - pytest
@@ -24,12 +24,12 @@ dependencies:
   - pandas
   - flake8
   - statsmodels
-  - python[version='<3.7']
+  # - python[version='<3.7']
   - conda-forge::peakutils
   - matplotlib
   - joblib
   - scipy
-  - rigge::peak-detect
+  # - rigge::peak-detect
   - vega_datasets
   - pyface
   - traitsui
@@ -44,4 +44,3 @@ dependencies:
   - h5py
   - pillow
 prefix: /anaconda2/envs/mne3
-
