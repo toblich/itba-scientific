@@ -10,7 +10,7 @@
 # ENTRYPOINT [ "python" ]
 
 
-FROM python:3
+FROM python:3.9.16-slim
 
 RUN pip install --no-cache-dir \
   pandas \
