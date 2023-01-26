@@ -1,56 +1,56 @@
-"""
-==================
-Final Assignment
-==================
+# """
+# ==================
+# Final Assignment
+# ==================
 
-El largo de los registros es entre 10 y 11 minutos
-Fs = 512
+# El largo de los registros es entre 10 y 11 minutos
+# Fs = 512
 
-FECHA DE ENTREGA: 10/01/2023
-SEGUNDA FECHA DE ENTREGA: 10/02/2023
-
-
-|---- BASELINE --------|
-|---- TOSER ------|
-|---- RESPIRAR FONDO ------- |
-|---- RESPIRAR RAPIDO ----|
-|---- CUENTA MENTAL --------|
-|---- COLORES VIOLETA ------|
-|---- COLORES ROJO --------|
-|---- SONREIR -----|
-|---- DESEGRADABLE -----| 
-|---- AGRADABLE --------|
-|---- PESTANEOS CODIGO ------ |
-
-* Baseline: esta parte la pueden utilizar para tener ejemplos negativos de cualquier cosa que deseen detectar.  Por 
-ejemplo si quieren detectar que algo cambia cuando hay "imaginación en colores violeta", extraen features de ese momento y de
-este e intentan armar un clasificador.
-* Toser: Probablemente queden registrados como picos, provocados por el propio movimiento de la cabeza.
-* Respirar fondo vs respirar rápido: quizás puede haber un cambio en alguna frecuencia.
-* Cuenta mental: Está reportado que esto genera cambios en las frecuencias altas gamma y beta, de entre 20-30 Hz.
-* Colores violeta / rojo:  de acá primero pueden intentar ver si hay cambio en relación a baseline en la frecuencia
-de 10 Hz porque para ambos casos cerré los ojos.  Luego pueden intentar ver si un clasificador les puede diferenciar las clases.
-* Sonreir: esto quizás genere algunos artefactos, picos en la señal debido al movimiento de la cara.
-* Agradable/Desagradable: aca no tengo idea, prueben contra baseline.  No hay nada reportado así.
-* Pestañeos:  En esta parte hay pestañeos que pueden intentar extraer.
+# FECHA DE ENTREGA: 10/01/2023
+# SEGUNDA FECHA DE ENTREGA: 10/02/2023
 
 
-Los datos, el registro de EEG y el video, están disponibles en el siguiente link:
-https://drive.google.com/file/d/1ByQDK4ZPxbqw7T17k--avTcgSCCzs3vi/view?usp=sharing
+# |---- BASELINE --------|
+# |---- TOSER ------|
+# |---- RESPIRAR FONDO ------- |
+# |---- RESPIRAR RAPIDO ----|
+# |---- CUENTA MENTAL --------|
+# |---- COLORES VIOLETA ------|
+# |---- COLORES ROJO --------|
+# |---- SONREIR -----|
+# |---- DESEGRADABLE -----|
+# |---- AGRADABLE --------|
+# |---- PESTANEOS CODIGO ------ |
 
-Objetivo:
-El objetivo es dado este registro implementar un análisis de estos datos, exploratorio, superviado 
-o no supervisado, para intentar identificar que es lo que el sujeto está haciendo en cada bloque.  Pueden 
-intentar separar dos bloques entre sí, un bloque particular frente al BASELINE (esto es el momento cuando el sujeto
-no hace nada particular).  Pueden usar una parte de dos bloques para entrenar y luego intentar predecir las otras partes.
-Tienen que producir un PDF informe con gráficos/tablas breve y resumido.
+# * Baseline: esta parte la pueden utilizar para tener ejemplos negativos de cualquier cosa que deseen detectar.  Por
+# ejemplo si quieren detectar que algo cambia cuando hay "imaginación en colores violeta", extraen features de ese momento y de
+# este e intentan armar un clasificador.
+# * Toser: Probablemente queden registrados como picos, provocados por el propio movimiento de la cabeza.
+# * Respirar fondo vs respirar rápido: quizás puede haber un cambio en alguna frecuencia.
+# * Cuenta mental: Está reportado que esto genera cambios en las frecuencias altas gamma y beta, de entre 20-30 Hz.
+# * Colores violeta / rojo:  de acá primero pueden intentar ver si hay cambio en relación a baseline en la frecuencia
+# de 10 Hz porque para ambos casos cerré los ojos.  Luego pueden intentar ver si un clasificador les puede diferenciar las clases.
+# * Sonreir: esto quizás genere algunos artefactos, picos en la señal debido al movimiento de la cara.
+# * Agradable/Desagradable: aca no tengo idea, prueben contra baseline.  No hay nada reportado así.
+# * Pestañeos:  En esta parte hay pestañeos que pueden intentar extraer.
 
-Fecha de entrega: 10 de Enero 2023
-Segunda fecha de entrega: 10 de Febrero 2023
 
-"""
+# Los datos, el registro de EEG y el video, están disponibles en el siguiente link:
+# https://drive.google.com/file/d/1ByQDK4ZPxbqw7T17k--avTcgSCCzs3vi/view?usp=sharing
 
-print(__doc__)
+# Objetivo:
+# El objetivo es dado este registro implementar un análisis de estos datos, exploratorio, superviado
+# o no supervisado, para intentar identificar que es lo que el sujeto está haciendo en cada bloque.  Pueden
+# intentar separar dos bloques entre sí, un bloque particular frente al BASELINE (esto es el momento cuando el sujeto
+# no hace nada particular).  Pueden usar una parte de dos bloques para entrenar y luego intentar predecir las otras partes.
+# Tienen que producir un PDF informe con gráficos/tablas breve y resumido.
+
+# Fecha de entrega: 10 de Enero 2023
+# Segunda fecha de entrega: 10 de Febrero 2023
+
+# """
+
+# print(__doc__)
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -67,7 +67,7 @@ from io import StringIO
 #
 # Tienen que entregar un PDF, tipo Markdown con código, gráficos y cualquier insight obtenido del dataset.
 
-signals = pd.read_csv('data/B001/eeg.dat', delimiter=' ', names = ['timestamp','counter','eeg','attention','meditation','blinking'])
+signals = pd.read_csv('/itba/eeg.dat', delimiter=' ', names = ['timestamp','counter','eeg','attention','meditation','blinking'])
 
 print('Estructura de la informacion:')
 print(signals.head())
@@ -83,4 +83,4 @@ plt.ylabel('eeg(t)');
 plt.title(r'EEG Signal')     # r'' representa un raw string que no tiene caracteres especiales
 plt.ylim([-2000, 2000]);
 plt.xlim([0,len(eeg)])
-plt.show()
+plt.savefig('/itba/out/basic.png')

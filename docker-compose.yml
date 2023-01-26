@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  conda:
+    build:
+      context: .
+    command: /itba/ejerciciofinal.py
+    volumes:
+      - "./ejerciciofinal.py:/itba/ejerciciofinal.py"
+      - "./protocolo/eeg.dat:/itba/eeg.dat"
+      - "./out:/itba/out:rw"
