@@ -56,6 +56,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import requests
 from io import StringIO
+from scipy.fft import rfft, rfftfreq
 
 # El protocolo experimental que implementamos tiene 2 datasets:
 # 1- Dataset de las señales de EEG
@@ -67,20 +68,82 @@ from io import StringIO
 #
 # Tienen que entregar un PDF, tipo Markdown con código, gráficos y cualquier insight obtenido del dataset.
 
-signals = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names = ['timestamp','counter','eeg','attention','meditation','blinking'])
 
-print('Estructura de la informacion:')
-print(signals.head())
+# MAIN
 
-data = signals.values
-eeg = data[:,2]
+def main():
+    signals = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
+        'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
 
-print(eeg)
+    print('Estructura de la informacion:')
+    print(signals.head())
 
-plt.plot(eeg,'r', label='EEG')
-plt.xlabel('t');
-plt.ylabel('eeg(t)');
-plt.title(r'EEG Signal')     # r'' representa un raw string que no tiene caracteres especiales
-plt.ylim([-2000, 2000]);
-plt.xlim([0,len(eeg)])
-plt.show()
+    data = signals.values
+    eeg = data[:, 2]
+
+    plot_signal(signals)
+
+
+def plot_signal(df: pd.DataFrame):
+    init_ts = df.timestamp[0]
+    df.loc[:, "timer"] = df.timestamp - init_ts
+
+    ticks = [i for i in range(0, int(df.timer.max())+60, 60)]
+
+    _, ax = plt.subplots(nrows=4, ncols=2, sharex='col', **
+                         {"figsize": (24, 12), "dpi": 100})
+
+    LINEWIDTH = 0.75
+
+    # En la primera columna grafico señales en el tiempo
+
+    ax[0, 0].plot(df.timer, df.eeg, color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 0].set_title('EEG - Señales en el tiempo')
+    ax[0, 0].set_ylabel('eeg(t)')
+
+    ax[1, 0].plot(df.timer, df.meditation, color='green', linewidth=LINEWIDTH)
+    ax[1, 0].set_ylabel('meditation(t)')
+
+    ax[2, 0].plot(df.timer, df.attention, color='orange', linewidth=LINEWIDTH)
+    ax[2, 0].set_ylabel('attention(t)')
+
+    ax[3, 0].plot(df.timer, df.blinking, color='red', linewidth=LINEWIDTH)
+    ax[3, 0].set_ylabel('blinking(t)')
+
+    ax[3, 0].set_xticks(ticks)
+    ax[3, 0].set_xlabel("t [s]")
+
+    # En la 2da columna grafico en el espectro de frecuencias
+    N = len(df)
+    SAMPLE_RATE = 512  # dato del enunciado
+
+    xf = rfftfreq(N, 1 / SAMPLE_RATE)
+    trunc = len(xf) // 10 # Frecuencias por encima de esto casi ni se ve la amplitud
+
+    ax[0, 1].plot(xf[:trunc], np.abs(rfft(df.eeg))[:trunc],
+                  color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 1].set_ylabel('eeg(f)')
+    ax[0, 1].set_title('EEG - Espectro')
+
+    ax[1, 1].plot(xf[:trunc], np.abs(rfft(df.meditation))[:trunc],
+                  color='green', linewidth=LINEWIDTH)
+    ax[1, 1].set_ylabel('meditation(f)')
+
+    ax[2, 1].plot(xf[:trunc], np.abs(rfft(df.attention))[:trunc],
+                  color='orange', linewidth=LINEWIDTH)
+    ax[2, 1].set_ylabel('attention(f)')
+
+    ax[3, 1].plot(xf[:trunc], np.abs(rfft(df.blinking))[:trunc],
+                  color='red', linewidth=LINEWIDTH)
+    ax[3, 1].set_ylabel('blinking(f)')
+    ax[3, 1].set_xlabel(
+        "f [Hz]\n(truncado porque a mayores frecuencias las señales son mínimas)")
+
+    plt.tight_layout()
+    plt.savefig("out/timepo-espectro.png")
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
