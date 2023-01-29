@@ -59,6 +59,7 @@ import requests
 import math
 import scipy
 from scipy import stats
+from scipy.signal import butter, lfilter, detrend
 from io import StringIO
 from scipy.fft import rfft, rfftfreq
 
@@ -76,35 +77,43 @@ from scipy.fft import rfft, rfftfreq
 # MAIN
 
 def main():
-    signals = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
+    df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
         'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
 
     print('Estructura de la informacion:')
-    print(signals.head())
+    print(df.head())
 
-    init_ts = signals.timestamp[0]
-    signals.loc[:, "timer"] = signals.timestamp - init_ts
+    # Agregar features
+    init_ts = df.timestamp[0]
+    df.loc[:, "timer"] = df.timestamp - init_ts # Util para los graficos (eje x)
+    df['eeg_detrended'] = detrend(df.eeg)
+    df['delta'] = butter_bandpass_filter(df.eeg, 0.5, 2.75)
+    df['theta'] = butter_bandpass_filter(df.eeg, 3.5, 6.75)
+    df['alpha_low'] = butter_bandpass_filter(df.eeg, 7.5, 9.25)
+    df['alpha_high'] = butter_bandpass_filter(df.eeg, 10.0, 11.75)
+    df['beta_low'] = butter_bandpass_filter(df.eeg, 13.0, 16.75)
+    df['beta_high'] = butter_bandpass_filter(df.eeg, 18.0, 29.75)
+    df['gamma_low'] = butter_bandpass_filter(df.eeg, 31.0, 39.75)
+    df['gamma_mid'] = butter_bandpass_filter(df.eeg, 41.0, 49.75)
 
-    data = signals.values
-    eeg = data[:, 2]
-
-    plot_signal(signals, "general")
-    # eventcounter(eeg, signals.timer)
+    # Gráficos
+    plot_signal(df, "general")
+    # eventcounter(df.eeg, df.timer)
 
     labels = {
-        "0:02 - 0:04": "pestaneo_rapido",
+        "0:01 - 0:04": "pestaneo_rapido",
         "0:06 - 1:04": "baseline",
         "1:05 - 1:06": "pestaneo_rapido",
         "1:08 - 2:10": "tos",
         "2:11 - 2:13": "pestaneo_rapido",
-        "2:14 - 3:11": "respira_hondo",
-        "3:12 - 3:14": "pestaneo_rapido",
-        "3:15 - 4:10": "respira_rapido",
-        "4:11 - 4:13": "pestaneo_rapido",
-        "4:14 - 5:09": "cuenta_mental",
-        "5:10 - 5:13": "pestaneo_rapido",
-        "5:14 - 6:12": "violeta",
-        "6:13 - 6:15": "pestaneo_rapido",
+        "2:14 - 3:10": "respira_hondo",
+        "3:11 - 3:13": "pestaneo_rapido",
+        "3:14 - 4:09": "respira_rapido",
+        "4:10 - 4:12": "pestaneo_rapido",
+        "4:13 - 5:09": "cuenta_mental",
+        "5:10 - 5:14": "pestaneo_rapido",
+        "5:15 - 6:11": "violeta",
+        "6:12 - 6:15": "pestaneo_rapido",
         "6:16 - 7:10": "rojo",
         "7:11 - 7:13": "pestaneo_rapido",
         "7:14 - 8:13": "sonreir",
@@ -116,74 +125,67 @@ def main():
     }
     for (interval, label) in labels.items():
         start, end = interval.split(" - ")
-        filtered_signals = signals.loc[(signals.timer >= mark_to_ts(start)) & (signals.timer <= mark_to_ts(end))]
-        process_chunk(filtered_signals, label, start)
+        filtered_signals = df.loc[(df.timer >= mark_to_ts(start)) & (df.timer <= mark_to_ts(end))]
+        process_chunk(filtered_signals, label, start, end)
 
 def mark_to_ts(mark: str):
     mins, segs = mark.split(":")
     return int(mins) * 60 + int(segs)
 
-def process_chunk(signals, label, start_mark):
-    plot_signal(signals, f"{label} ({start_mark})")
+def process_chunk(signals, label, start_mark, end_mark):
+    plot_signal(signals, f"{label} ({start_mark} ~ {end_mark})")
 
+# Bandas de Frecuencia
+SAMPLING_RATE = 512
+def butter_bandpass(lowcut, highcut, fs=SAMPLING_RATE, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+def butter_bandpass_filter(data, lowcut, highcut, fs=SAMPLING_RATE, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
 
 def plot_signal(df: pd.DataFrame, plotname: str):
-    # ticks = [i for i in range(0, int(df.timer.max())+60, 60)]
-
-    _, ax = plt.subplots(nrows=3, ncols=2, sharex='col', **
+    fig, ax = plt.subplots(nrows=5, ncols=2, sharex='col', **
                          {"figsize": (24, 12), "dpi": 100})
+    fig.suptitle(plotname)
+    fig.supxlabel('t [seg] (medido desde el inicio del dataset)')
 
     LINEWIDTH = 0.75
 
-    # En la primera columna grafico señales en el tiempo
-
     ax[0, 0].plot(df.timer, df.eeg, color='steelblue', linewidth=LINEWIDTH)
-    ax[0, 0].set_title(f'EEG - Señales en el tiempo ({plotname})')
-    ax[0, 0].set_ylabel('eeg(t)')
+    ax[0, 0].set_ylabel('eeg')
+    ax[0, 1].plot(df.timer, df.eeg_detrended, color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 1].set_ylabel('eeg_detrended')
 
-    ax[1, 0].plot(df.timer, df.meditation, color='green', linewidth=LINEWIDTH)
-    ax[1, 0].set_ylabel('meditation(t)')
+    ax[1, 0].plot(df.timer, df.delta, color='green', linewidth=LINEWIDTH)
+    ax[1, 0].set_ylabel('delta')
+    ax[1, 1].plot(df.timer, df.theta, color='green', linewidth=LINEWIDTH)
+    ax[1, 1].set_ylabel('theta')
 
-    ax[2, 0].plot(df.timer, df.attention, color='orange', linewidth=LINEWIDTH)
-    ax[2, 0].set_ylabel('attention(t)')
+    ax[2, 0].plot(df.timer, df.alpha_low, color='red', linewidth=LINEWIDTH)
+    ax[2, 0].set_ylabel('alpha_low')
+    ax[2, 1].plot(df.timer, df.alpha_high, color='red', linewidth=LINEWIDTH)
+    ax[2, 1].set_ylabel('alpha_high')
 
-    # ax[3, 0].plot(df.timer, df.blinking, color='red', linewidth=LINEWIDTH)
-    # ax[3, 0].set_ylabel('blinking(t)')
+    ax[3, 0].plot(df.timer, df.beta_low, color='violet', linewidth=LINEWIDTH)
+    ax[3, 0].set_ylabel('beta_low')
+    ax[3, 1].plot(df.timer, df.beta_high, color='violet', linewidth=LINEWIDTH)
+    ax[3, 1].set_ylabel('beta_high')
 
-    # ax[2, 0].set_xticks(ticks)
-    ax[2, 0].set_xlabel("t [s]")
-
-    # En la 2da columna grafico en el espectro de frecuencias
-    N = len(df)
-    SAMPLE_RATE = 512  # dato del enunciado
-
-    # Frecuencias por encima de esto casi ni se ve la amplitud
-    xf = rfftfreq(N, 1 / SAMPLE_RATE)
-    trunc = len(xf) // 10
-
-    ax[0, 1].plot(xf[:trunc], np.abs(rfft(df.eeg))[:trunc],
-                  color='steelblue', linewidth=LINEWIDTH)
-    ax[0, 1].set_ylabel('eeg(f)')
-    ax[0, 1].set_title(f'EEG - Espectro ({plotname})')
-
-    ax[1, 1].plot(xf[:trunc], np.abs(rfft(df.meditation))[:trunc],
-                  color='green', linewidth=LINEWIDTH)
-    ax[1, 1].set_ylabel('meditation(f)')
-
-    ax[2, 1].plot(xf[:trunc], np.abs(rfft(df.attention))[:trunc],
-                  color='orange', linewidth=LINEWIDTH)
-    ax[2, 1].set_ylabel('attention(f)')
-
-    # ax[3, 1].plot(xf[:trunc], np.abs(rfft(df.blinking))[:trunc],
-    #               color='red', linewidth=LINEWIDTH)
-    # ax[3, 1].set_ylabel('blinking(f)')
-    ax[2, 1].set_xlabel(
-        "f [Hz]\n(truncado porque a mayores frecuencias las señales son mínimas)")
+    ax[4, 0].plot(df.timer, df.gamma_low, color='orange', linewidth=LINEWIDTH)
+    ax[4, 0].set_ylabel('gamma_low')
+    ax[4, 1].plot(df.timer, df.gamma_mid, color='orange', linewidth=LINEWIDTH)
+    ax[4, 1].set_ylabel('gamma_mid')
 
     plt.tight_layout()
-    plt.savefig(f"out/timepo-espectro-{plotname}.png")
+    plt.savefig(f"out/fase-{plotname}.png")
 
-    plt.show()
+    # plt.show()
 
 
 def eventcounter(eeg, timer):
