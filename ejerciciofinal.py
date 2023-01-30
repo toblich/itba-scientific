@@ -58,7 +58,7 @@ import seaborn as sns
 import requests
 import math
 import scipy
-from scipy import stats
+from collections import Counter
 from scipy.signal import butter, lfilter, detrend
 from io import StringIO
 from scipy.fft import rfft, rfftfreq
@@ -76,25 +76,40 @@ from scipy.fft import rfft, rfftfreq
 
 # MAIN
 
+PREPROCESS_DATASET = False
+PREPROCESSED_DATASET_PATH='out/eeg_enriched.csv'
+
 def main():
-    df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
-        'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
+    if PREPROCESS_DATASET:
+        df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
+            'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
 
-    print('Estructura de la informacion:')
+        print('Estructura de la informacion:')
+        print(df.head())
+
+        # Agregar features
+        init_ts = df.timestamp[0]
+        df.loc[:, "timer"] = df.timestamp - \
+            init_ts  # Util para los graficos (eje x)
+        df['eeg_detrended'] = detrend(df.eeg)
+        add_band(df, 'eeg_detrended', None, None)
+        add_band(df, 'theta', 3.5, 6.75)
+        add_band(df, 'alpha_low', 7.5, 9.25)
+        add_band(df, 'alpha_high', 10.0, 11.75)
+        add_band(df, 'beta_low', 13.0, 16.75)
+        add_band(df, 'beta_high', 18.0, 29.75)
+        add_band(df, 'gamma_low', 31.0, 39.75)
+        add_band(df, 'gamma_mid', 41.0, 49.75)
+
+        df.to_csv(PREPROCESSED_DATASET_PATH, index=False)
+        print('Estructura de la informacion enriquecida:')
+        print(df.head())
+        return
+    else:
+        df = pd.read_csv(PREPROCESSED_DATASET_PATH)
+
+    print('Estructura de la informacion enriquecida:')
     print(df.head())
-
-    # Agregar features
-    init_ts = df.timestamp[0]
-    df.loc[:, "timer"] = df.timestamp - init_ts # Util para los graficos (eje x)
-    df['eeg_detrended'] = detrend(df.eeg)
-    df['delta'] = butter_bandpass_filter(df.eeg, 0.5, 2.75)
-    df['theta'] = butter_bandpass_filter(df.eeg, 3.5, 6.75)
-    df['alpha_low'] = butter_bandpass_filter(df.eeg, 7.5, 9.25)
-    df['alpha_high'] = butter_bandpass_filter(df.eeg, 10.0, 11.75)
-    df['beta_low'] = butter_bandpass_filter(df.eeg, 13.0, 16.75)
-    df['beta_high'] = butter_bandpass_filter(df.eeg, 18.0, 29.75)
-    df['gamma_low'] = butter_bandpass_filter(df.eeg, 31.0, 39.75)
-    df['gamma_mid'] = butter_bandpass_filter(df.eeg, 41.0, 49.75)
 
     # Gráficos
     plot_signal(df, "general")
@@ -125,67 +140,108 @@ def main():
     }
     for (interval, label) in labels.items():
         start, end = interval.split(" - ")
-        filtered_signals = df.loc[(df.timer >= mark_to_ts(start)) & (df.timer <= mark_to_ts(end))]
+        filtered_signals = df.loc[(df.timer >= mark_to_ts(
+            start)) & (df.timer <= mark_to_ts(end))]
         process_chunk(filtered_signals, label, start, end)
+
 
 def mark_to_ts(mark: str):
     mins, segs = mark.split(":")
     return int(mins) * 60 + int(segs)
 
+
 def process_chunk(signals, label, start_mark, end_mark):
     plot_signal(signals, f"{label} ({start_mark} ~ {end_mark})")
 
+
+def crest_factor(x):
+    return np.max(np.abs(x))/np.sqrt(np.mean(np.square(x)))
+
+def peak_to_peak(a):
+    return abs(np.max(a)) + abs(np.min(a))
+
+def shannon_entropy(a):
+    return scipy.stats.entropy(list(Counter(a).values()), base=2)
+
+def hjorth(a):
+    first_deriv = np.diff(a)
+    second_deriv = np.diff(a, 2)
+
+    var_zero = np.mean(a ** 2)
+    var_d1 = np.mean(first_deriv ** 2)
+    var_d2 = np.mean(second_deriv ** 2)
+
+    activity = var_zero
+    morbidity = np.sqrt(var_d1 / var_zero)
+    complexity = np.sqrt(var_d2 / var_d1) / morbidity
+
+    return activity, morbidity, complexity
+
 # Bandas de Frecuencia
-SAMPLING_RATE = 512
-def butter_bandpass(lowcut, highcut, fs=SAMPLING_RATE, order=5):
+def butter_bandpass(lowcut, highcut, fs, order):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
     b, a = butter(order, [low, high], btype='band')
     return b, a
 
-def butter_bandpass_filter(data, lowcut, highcut, fs=SAMPLING_RATE, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order):
+    b, a = butter_bandpass(lowcut, highcut, fs, order)
     y = lfilter(b, a, data)
     return y
 
+
+def add_band(df, name, lowcut, highcut, fs=512, order=5):
+    print(f"======================= ADDING BAND {name} ======================")
+    if lowcut and highcut:
+        df[name] = butter_bandpass_filter(
+            df.eeg_detrended, lowcut, highcut, fs, order)
+
+    grouped = df.groupby(['timestamp'])[name]
+
+    df[f'{name}_mean'] = grouped.transform('mean')
+    df[f'{name}_std'] = grouped.transform('std')
+    df[f'{name}_ptp'] = grouped.transform(peak_to_peak)
+    df[f'{name}_entropy'] = grouped.transform(shannon_entropy)
+    df[f'{name}_crest'] = grouped.transform(crest_factor)
+    df[f'{name}_hjorth_activity'] = grouped.transform(lambda a: hjorth(a)[0])
+    df[f'{name}_hjorth_morbidity'] = grouped.transform(lambda a: hjorth(a)[1])
+    df[f'{name}_hjorth_complexity'] = grouped.transform(lambda a: hjorth(a)[2])
+
+
 def plot_signal(df: pd.DataFrame, plotname: str):
-    fig, ax = plt.subplots(nrows=5, ncols=2, sharex='col', **
-                         {"figsize": (24, 12), "dpi": 100})
+    fig, ax = plt.subplots(nrows=4, ncols=2, sharex='col', **
+                           {"figsize": (24, 12), "dpi": 100})
     fig.suptitle(plotname)
     fig.supxlabel('t [seg] (medido desde el inicio del dataset)')
 
     LINEWIDTH = 0.75
 
-    ax[0, 0].plot(df.timer, df.eeg, color='steelblue', linewidth=LINEWIDTH)
-    ax[0, 0].set_ylabel('eeg')
-    ax[0, 1].plot(df.timer, df.eeg_detrended, color='steelblue', linewidth=LINEWIDTH)
-    ax[0, 1].set_ylabel('eeg_detrended')
+    ax[0, 0].plot(df.timer, df.eeg_detrended, color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 0].set_ylabel('eeg_detrended')
+    ax[1, 0].plot(df.timer, df.theta, color='green', linewidth=LINEWIDTH)
+    ax[1, 0].set_ylabel('theta')
 
-    ax[1, 0].plot(df.timer, df.delta, color='green', linewidth=LINEWIDTH)
-    ax[1, 0].set_ylabel('delta')
-    ax[1, 1].plot(df.timer, df.theta, color='green', linewidth=LINEWIDTH)
-    ax[1, 1].set_ylabel('theta')
+    ax[0, 1].plot(df.timer, df.alpha_low, color='red', linewidth=LINEWIDTH)
+    ax[0, 1].set_ylabel('alpha_low')
+    ax[1, 1].plot(df.timer, df.alpha_high, color='red', linewidth=LINEWIDTH)
+    ax[1, 1].set_ylabel('alpha_high')
 
-    ax[2, 0].plot(df.timer, df.alpha_low, color='red', linewidth=LINEWIDTH)
-    ax[2, 0].set_ylabel('alpha_low')
-    ax[2, 1].plot(df.timer, df.alpha_high, color='red', linewidth=LINEWIDTH)
-    ax[2, 1].set_ylabel('alpha_high')
+    ax[2, 0].plot(df.timer, df.beta_low, color='violet', linewidth=LINEWIDTH)
+    ax[2, 0].set_ylabel('beta_low')
+    ax[3, 0].plot(df.timer, df.beta_high, color='violet', linewidth=LINEWIDTH)
+    ax[3, 0].set_ylabel('beta_high')
 
-    ax[3, 0].plot(df.timer, df.beta_low, color='violet', linewidth=LINEWIDTH)
-    ax[3, 0].set_ylabel('beta_low')
-    ax[3, 1].plot(df.timer, df.beta_high, color='violet', linewidth=LINEWIDTH)
-    ax[3, 1].set_ylabel('beta_high')
-
-    ax[4, 0].plot(df.timer, df.gamma_low, color='orange', linewidth=LINEWIDTH)
-    ax[4, 0].set_ylabel('gamma_low')
-    ax[4, 1].plot(df.timer, df.gamma_mid, color='orange', linewidth=LINEWIDTH)
-    ax[4, 1].set_ylabel('gamma_mid')
+    ax[2, 1].plot(df.timer, df.gamma_low, color='orange', linewidth=LINEWIDTH)
+    ax[2, 1].set_ylabel('gamma_low')
+    ax[3, 1].plot(df.timer, df.gamma_mid, color='orange', linewidth=LINEWIDTH)
+    ax[3, 1].set_ylabel('gamma_mid')
 
     plt.tight_layout()
     plt.savefig(f"out/fase-{plotname}.png")
 
-    # plt.show()
+    plt.show()
 
 
 def eventcounter(eeg, timer):
