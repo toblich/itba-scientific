@@ -129,6 +129,8 @@ def preprocess():
     df.loc[:, "timer"] = df.timestamp - init_ts  # Para el eje x
     df['eeg_detrended'] = detrend(df.eeg)
     add_band(df, 'eeg_detrended', None, None)
+    add_band(df, 'attention', None, None)
+    add_band(df, 'meditation', None, None)
     add_band(df, 'theta', 3.5, 6.75)
     add_band(df, 'alpha_low', 7.5, 9.25)
     add_band(df, 'alpha_high', 10.0, 11.75)
@@ -137,6 +139,14 @@ def preprocess():
     add_band(df, 'gamma_low', 31.0, 39.75)
     add_band(df, 'gamma_mid', 41.0, 49.75)
 
+    # Agregar clase
+    for (interval, label) in LABELS.items():
+        start, end = interval.split(" - ")
+        predicate = (
+            df.timer >= mark_to_ts(start)) & (df.timer <= mark_to_ts(end))
+        df.loc[predicate, "label"] = label
+
+    # Persistir
     df.to_csv(PREPROCESSED_DATASET_PATH, index=False)
     print('Estructura de la informacion enriquecida:')
     print(df.head())
