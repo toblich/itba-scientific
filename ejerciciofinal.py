@@ -77,7 +77,8 @@ from scipy.fft import rfft, rfftfreq
 # MAIN
 
 PREPROCESS_DATASET = False
-PREPROCESSED_DATASET_PATH='out/eeg_enriched.csv'
+PREPROCESSED_DATASET_PATH = 'out/eeg_enriched.csv'
+
 
 def main():
     if PREPROCESS_DATASET:
@@ -113,7 +114,6 @@ def main():
 
     # Gráficos
     plot_signal(df, "general")
-    # eventcounter(df.eeg, df.timer)
 
     labels = {
         "0:01 - 0:04": "pestaneo_rapido",
@@ -157,11 +157,14 @@ def process_chunk(signals, label, start_mark, end_mark):
 def crest_factor(x):
     return np.max(np.abs(x))/np.sqrt(np.mean(np.square(x)))
 
+
 def peak_to_peak(a):
     return abs(np.max(a)) + abs(np.min(a))
 
+
 def shannon_entropy(a):
     return scipy.stats.entropy(list(Counter(a).values()), base=2)
+
 
 def hjorth(a):
     first_deriv = np.diff(a)
@@ -176,6 +179,7 @@ def hjorth(a):
     complexity = np.sqrt(var_d2 / var_d1) / morbidity
 
     return activity, morbidity, complexity
+
 
 # Bandas de Frecuencia
 def butter_bandpass(lowcut, highcut, fs, order):
@@ -218,7 +222,8 @@ def plot_signal(df: pd.DataFrame, plotname: str):
 
     LINEWIDTH = 0.75
 
-    ax[0, 0].plot(df.timer, df.eeg_detrended, color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 0].plot(df.timer, df.eeg_detrended,
+                  color='steelblue', linewidth=LINEWIDTH)
     ax[0, 0].set_ylabel('eeg_detrended')
     ax[1, 0].plot(df.timer, df.theta, color='green', linewidth=LINEWIDTH)
     ax[1, 0].set_ylabel('theta')
@@ -242,119 +247,6 @@ def plot_signal(df: pd.DataFrame, plotname: str):
     plt.savefig(f"out/fase-{plotname}.png")
 
     plt.show()
-
-
-def eventcounter(eeg, timer):
-    # print("Some values from the dataset:\n")
-    # print(results[0:10,])
-    # print("Matrix dimension: {}".format(results.shape))
-    print("EEG Vector Metrics\n")
-    print("Length: {}".format(len(eeg)))
-    print("Max value: {}".format(eeg.max()))
-    print("Min value: {}".format(eeg.min()))
-    print("Range: {}".format(eeg.max()-eeg.min()))
-    print("Average value: {}".format(eeg.mean()))
-    print("Variance: {}".format(eeg.var()))
-    print("Std: {}".format(math.sqrt(eeg.var())))
-    plt.figure(figsize=(12, 5))
-    plt.plot(timer, eeg, color="green")
-    plt.ylabel("Amplitude", size=10)
-    plt.xlabel("t [seg]", size=10)
-    plt.title("Serie temporal de eeg", size=20)
-    plt.savefig("out/eeg.png")
-    plt.show()
-
-    # Prueba de normalidad
-    print('normality = {}'.format(scipy.stats.normaltest(eeg)))
-    sns.distplot(eeg)
-    plt.title("Normality-1 Analysis on EEG vector")
-    plt.savefig("out/norm-1.png")
-    plt.show()
-    sns.boxplot(eeg, color="red")
-    plt.title("Normality-2 Analysis on EEG vector")
-    plt.savefig("out/norm2.png")
-    plt.show()
-    res = stats.probplot(eeg, plot=plt)
-    plt.title("Normality-3 Analysis on EEG vector")
-    plt.savefig("out/norm3.png")
-    plt.show()
-
-    # Find the threshold values to determine what is a blinking and what is not
-    umbral_superior = int(eeg.mean()+3*eeg.std())
-    print("Upper Threshold: {}".format(umbral_superior))
-    umbral_inferior = int(eeg.mean()-3*eeg.std())
-    print("Lower Threshold: {}".format(umbral_inferior))
-    plt.figure(figsize=(12, 5))
-    plt.plot(timer, eeg, color="green")
-    plt.plot(timer, np.full(len(eeg), umbral_superior), 'r--')
-    plt.plot(timer, np.full(len(eeg), umbral_inferior), 'r--')
-    plt.ylabel("Amplitude", size=10)
-    plt.xlabel("t [seg]", size=10)
-    plt.title("EEG Series with control limits", size=20)
-    plt.annotate("Upper Threshold", xy=(500, umbral_superior+10), color="red")
-    plt.annotate("Lower Threshold", xy=(500, umbral_inferior+10), color="red")
-    plt.savefig("out/blinking-std.png")
-    plt.show()
-
-    lowerbound = int(np.percentile(eeg, 1))
-    upperbound = int(np.percentile(eeg, 99))
-
-    plt.plot(timer, eeg, color="steelblue")
-    plt.plot(timer, np.full(len(eeg), lowerbound), color="goldenrod", ls="--")
-    plt.plot(timer, np.full(len(eeg), upperbound), color="goldenrod", ls="--")
-    plt.ylabel("Amplitude", size=10)
-    plt.xlabel("t [seg]", size=10)
-    plt.title("EEG Series with control limits", size=20)
-    # dinamizo los valores del eje así se adapta a los datos que proceso
-    plt.ylim([min(eeg)*1.1, max(eeg)*1.1])
-    plt.annotate("Lower Bound", xy=(500, lowerbound+10), color="goldenrod")
-    plt.annotate("Upper Bound", xy=(500, upperbound+10), color="goldenrod")
-    plt.savefig('out/blinking-pct.png')
-    plt.show()
-
-    # Grafico el filtro de pestañeos/blinking
-    # Utilizo una función lambda para marcar los pestañeos
-
-    blinks = list(
-        (map(lambda x: 1 if x > upperbound else (-1 if x < lowerbound else 0), eeg)))
-    blinks = np.asarray(blinks)
-
-    plt.plot(timer, blinks, color="darksalmon")
-    plt.title("Blinking Filter", size=20)
-    plt.ylabel("Class", size=10)
-    plt.xlabel("t [seg]", size=10)
-    plt.savefig('out/blinkingfilter.png')
-    plt.show()
-
-    # Encuentro picos positivos. Filtro los valores donde blink==1, y luego analizo que haya habido un salto realmente (para no contar dos veces puntos consecutivos).
-    # Con un map y una funcion lambda obtengo una lista con booleanos para los valores donde hay picos realmente.
-    # Luego los filtro con una función filter y otra lambda
-    peak = np.where(blinks == 1)[0]
-
-    peakdiff = np.diff(np.append(0, peak))
-
-    boolpeak = list(map(lambda x: x > 100, peakdiff))
-
-    peakslocation = list(filter(lambda x: x, boolpeak*peak))
-
-    # Repito para los valles, mismo algoritmo pero busco blinks == -1
-    valley = np.where(blinks == -1)[0]
-
-    valleydiff = np.diff(np.append(0, valley))
-
-    boolvalley = list(map(lambda x: x > 100, valleydiff))
-
-    valleylocation = list(filter(lambda x: x, boolvalley*valley))
-
-    # Hago un append de los valles y los picos, y los ordeno. Luego los cuento para imprimir tanto la cantidad de pestañeos, como la localización de los mismos
-
-    blinklocations = np.sort(np.append(peakslocation, valleylocation))
-
-    blinkcount = np.count_nonzero(blinklocations)
-
-    print(f'Count of Blinks: {blinkcount}')
-    print('Location of Blinks')
-    print(blinklocations)
 
 
 if __name__ == "__main__":
