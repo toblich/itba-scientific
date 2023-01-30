@@ -79,32 +79,34 @@ from scipy.fft import rfft, rfftfreq
 PREPROCESS_DATASET = False
 PREPROCESSED_DATASET_PATH = 'out/eeg_enriched.csv'
 
+LABELS = {
+    "0:01 - 0:04": "pestaneo_rapido",
+    "0:06 - 1:04": "baseline",
+    "1:05 - 1:06": "pestaneo_rapido",
+    "1:08 - 2:10": "tos",
+    "2:11 - 2:13": "pestaneo_rapido",
+    "2:14 - 3:10": "respira_hondo",
+    "3:11 - 3:13": "pestaneo_rapido",
+    "3:14 - 4:09": "respira_rapido",
+    "4:10 - 4:12": "pestaneo_rapido",
+    "4:13 - 5:09": "cuenta_mental",
+    "5:10 - 5:14": "pestaneo_rapido",
+    "5:15 - 6:11": "violeta",
+    "6:12 - 6:15": "pestaneo_rapido",
+    "6:16 - 7:10": "rojo",
+    "7:11 - 7:13": "pestaneo_rapido",
+    "7:14 - 8:13": "sonreir",
+    "8:14 - 8:15": "pestaneo_rapido",
+    "8:16 - 8:37": "desagradable",
+    "8:38 - 10:10": "agradable",
+    "10:12 - 10:13": "pestaneo_rapido",
+    "10:14 - 11:00": "pestaneo_codigo",
+}
+
 
 def main():
     if PREPROCESS_DATASET:
-        df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
-            'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
-
-        print('Estructura de la informacion:')
-        print(df.head())
-
-        # Agregar features
-        init_ts = df.timestamp[0]
-        df.loc[:, "timer"] = df.timestamp - \
-            init_ts  # Util para los graficos (eje x)
-        df['eeg_detrended'] = detrend(df.eeg)
-        add_band(df, 'eeg_detrended', None, None)
-        add_band(df, 'theta', 3.5, 6.75)
-        add_band(df, 'alpha_low', 7.5, 9.25)
-        add_band(df, 'alpha_high', 10.0, 11.75)
-        add_band(df, 'beta_low', 13.0, 16.75)
-        add_band(df, 'beta_high', 18.0, 29.75)
-        add_band(df, 'gamma_low', 31.0, 39.75)
-        add_band(df, 'gamma_mid', 41.0, 49.75)
-
-        df.to_csv(PREPROCESSED_DATASET_PATH, index=False)
-        print('Estructura de la informacion enriquecida:')
-        print(df.head())
+        preprocess()
         return
     else:
         df = pd.read_csv(PREPROCESSED_DATASET_PATH)
@@ -112,36 +114,41 @@ def main():
     print('Estructura de la informacion enriquecida:')
     print(df.head())
 
-    # Gráficos
+    plots(df)
+
+
+def preprocess():
+    df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
+        'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
+
+    print('Estructura de la informacion:')
+    print(df.head())
+
+    # Agregar features
+    init_ts = df.timestamp[0]
+    df.loc[:, "timer"] = df.timestamp - init_ts  # Para el eje x
+    df['eeg_detrended'] = detrend(df.eeg)
+    add_band(df, 'eeg_detrended', None, None)
+    add_band(df, 'theta', 3.5, 6.75)
+    add_band(df, 'alpha_low', 7.5, 9.25)
+    add_band(df, 'alpha_high', 10.0, 11.75)
+    add_band(df, 'beta_low', 13.0, 16.75)
+    add_band(df, 'beta_high', 18.0, 29.75)
+    add_band(df, 'gamma_low', 31.0, 39.75)
+    add_band(df, 'gamma_mid', 41.0, 49.75)
+
+    df.to_csv(PREPROCESSED_DATASET_PATH, index=False)
+    print('Estructura de la informacion enriquecida:')
+    print(df.head())
+
+
+def plots(df: pd.DataFrame):
     plot_signal(df, "general")
 
-    labels = {
-        "0:01 - 0:04": "pestaneo_rapido",
-        "0:06 - 1:04": "baseline",
-        "1:05 - 1:06": "pestaneo_rapido",
-        "1:08 - 2:10": "tos",
-        "2:11 - 2:13": "pestaneo_rapido",
-        "2:14 - 3:10": "respira_hondo",
-        "3:11 - 3:13": "pestaneo_rapido",
-        "3:14 - 4:09": "respira_rapido",
-        "4:10 - 4:12": "pestaneo_rapido",
-        "4:13 - 5:09": "cuenta_mental",
-        "5:10 - 5:14": "pestaneo_rapido",
-        "5:15 - 6:11": "violeta",
-        "6:12 - 6:15": "pestaneo_rapido",
-        "6:16 - 7:10": "rojo",
-        "7:11 - 7:13": "pestaneo_rapido",
-        "7:14 - 8:13": "sonreir",
-        "8:14 - 8:15": "pestaneo_rapido",
-        "8:16 - 8:37": "desagradable",
-        "8:38 - 10:10": "agradable",
-        "10:12 - 10:13": "pestaneo_rapido",
-        "10:14 - 11:00": "pestaneo_codigo",
-    }
-    for (interval, label) in labels.items():
+    for (interval, label) in LABELS.items():
         start, end = interval.split(" - ")
-        filtered_signals = df.loc[(df.timer >= mark_to_ts(
-            start)) & (df.timer <= mark_to_ts(end))]
+        filtered_signals = df.loc[(df.timer >= mark_to_ts(start)) &
+                                  (df.timer <= mark_to_ts(end))]
         process_chunk(filtered_signals, label, start, end)
 
 
@@ -155,7 +162,7 @@ def process_chunk(signals, label, start_mark, end_mark):
 
 
 def crest_factor(x):
-    return np.max(np.abs(x))/np.sqrt(np.mean(np.square(x)))
+    return np.max(np.abs(x)) / np.sqrt(np.mean(np.square(x)))
 
 
 def peak_to_peak(a):
