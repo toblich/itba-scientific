@@ -62,6 +62,7 @@ from collections import Counter
 from scipy.signal import butter, lfilter, detrend
 from io import StringIO
 from scipy.fft import rfft, rfftfreq
+from time import time
 
 # El protocolo experimental que implementamos tiene 2 datasets:
 # 1- Dataset de las señales de EEG
@@ -79,27 +80,29 @@ from scipy.fft import rfft, rfftfreq
 PREPROCESS_DATASET = False
 PREPROCESSED_DATASET_PATH = 'out/eeg_enriched.csv'
 
+PESTANEO_RAPIDO = "pestaneo_rapido"
+
 LABELS = {
-    "0:01 - 0:04": "pestaneo_rapido",
+    "0:01 - 0:04": PESTANEO_RAPIDO,
     "0:06 - 1:04": "baseline",
-    "1:05 - 1:06": "pestaneo_rapido",
+    "1:05 - 1:06": PESTANEO_RAPIDO,
     "1:08 - 2:10": "tos",
-    "2:11 - 2:13": "pestaneo_rapido",
+    "2:11 - 2:13": PESTANEO_RAPIDO,
     "2:14 - 3:10": "respira_hondo",
-    "3:11 - 3:13": "pestaneo_rapido",
+    "3:11 - 3:13": PESTANEO_RAPIDO,
     "3:14 - 4:09": "respira_rapido",
-    "4:10 - 4:12": "pestaneo_rapido",
+    "4:10 - 4:12": PESTANEO_RAPIDO,
     "4:13 - 5:09": "cuenta_mental",
-    "5:10 - 5:14": "pestaneo_rapido",
+    "5:10 - 5:14": PESTANEO_RAPIDO,
     "5:15 - 6:11": "violeta",
-    "6:12 - 6:15": "pestaneo_rapido",
+    "6:12 - 6:15": PESTANEO_RAPIDO,
     "6:16 - 7:10": "rojo",
-    "7:11 - 7:13": "pestaneo_rapido",
+    "7:11 - 7:13": PESTANEO_RAPIDO,
     "7:14 - 8:13": "sonreir",
-    "8:14 - 8:15": "pestaneo_rapido",
+    "8:14 - 8:15": PESTANEO_RAPIDO,
     "8:16 - 8:37": "desagradable",
     "8:38 - 10:10": "agradable",
-    "10:12 - 10:13": "pestaneo_rapido",
+    "10:12 - 10:13": PESTANEO_RAPIDO,
     "10:14 - 11:00": "pestaneo_codigo",
 }
 
@@ -114,7 +117,8 @@ def main():
     print('Estructura de la informacion enriquecida:')
     print(df.head())
 
-    plots(df)
+    # plots(df)
+    modelos(df)
 
 
 def preprocess():
@@ -264,6 +268,74 @@ def plot_signal(df: pd.DataFrame, plotname: str):
     plt.savefig(f"out/fase-{plotname}.png")
 
     plt.show()
+
+
+def modelos(df: pd.DataFrame):
+    from sklearn.svm import SVC
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.preprocessing import StandardScaler, LabelEncoder
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1_score
+
+    # Seteo clase binaria
+    df.loc[df.label == PESTANEO_RAPIDO, 'target'] = PESTANEO_RAPIDO
+    df.loc[df.label != PESTANEO_RAPIDO, 'target'] = "otra_cosa"
+    print(df.head())
+
+    # Dropeo features
+    # df.drop(labels=[
+    #     # Estas no aportan info
+    #     # 'timestamp', 'timer', 'counter', 'blinking',
+    #     # Estas tienen demasiados NaN
+    #     'attention_hjorth_complexity', 'meditation_hjorth_complexity',
+    #     # Estas son trampa dejarlas ;)
+    #     # 'label', 'class',
+    # ], axis='columns', inplace=True)
+
+    # Selecciono features
+    features = [f"{band}_{metric}"
+                for band in ['eeg_detrended', 'theta', 'alpha_low', 'alpha_high']
+                for metric in ['std', 'ptp', 'crest', 'hjorth_complexity', 'entropy']
+                ]
+    df = df[features + ['target', 'timer']]
+
+
+    # Dropeo registros sin label o con otros problemas
+    print(df.describe())
+    df = df.dropna()
+    print(df.describe())
+
+    # Split train/test
+    train_full = df[(df.timer <= mark_to_ts("5:14"))]
+    train_class = train_full['target']
+    train = train_full[features]
+    test_full = df[(df.timer > mark_to_ts("5:14")) &
+              (df.timer < mark_to_ts("10:14"))]
+    test_class = test_full['target']
+    test = test_full[features]
+
+    # Inicializo modelos
+    SEED = 17
+    models = {
+        "svm_linear": SVC(kernel='linear', random_state=SEED),
+        "svm_poly": SVC(kernel='poly', random_state=SEED),
+        "svm_rbf": SVC(kernel='rbf', random_state=SEED),
+        "random_forest": RandomForestClassifier(n_estimators=50, random_state=SEED),
+    }
+
+    for name, model in models.items():
+        def prefix():
+            return f"{time()} {name}"
+        print(prefix(), "About to fit")
+        model.fit(train, train_class)
+        print(prefix(), "About to predict")
+        predictions = model.predict(test)
+        print(prefix(), "About to measure")
+        print(prefix(),
+              f"Accurracy score = {accuracy_score(test_class, predictions)}")
+        print(prefix(),
+              f"Confusion matrix = {confusion_matrix(test_class, predictions)}")
 
 
 if __name__ == "__main__":
