@@ -333,6 +333,14 @@ def modelos(df: pd.DataFrame):
         "random_forest": RandomForestClassifier(n_estimators=100, random_state=SEED),
     }
 
+    plt.figure()
+    plt.title("ROC")
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+
     for name, model in models.items():
         start = time()
 
@@ -344,10 +352,17 @@ def modelos(df: pd.DataFrame):
         print(prefix(), "About to predict")
         predictions = model.predict(test)
         print(prefix(), "About to measure")
+        fpr, tpr, thresholds = roc_curve(test_class, predictions)
+        area = auc(fpr, tpr)
         print(prefix(),
               f"Accurracy score = {accuracy_score(test_class, predictions)}")
+        print(prefix(), f"AUC = {area}")
         print(prefix(),
               f"Confusion matrix = \n{confusion_matrix(test_class, predictions)}")
+        plt.plot(fpr, tpr, label=f"{name} (AUC={area:.3f})")
+
+    plt.legend(loc="lower right")
+    plt.show()
 
 
 if __name__ == "__main__":
