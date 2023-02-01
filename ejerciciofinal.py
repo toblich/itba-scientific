@@ -64,6 +64,14 @@ from io import StringIO
 from scipy.fft import rfft, rfftfreq
 from time import time
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1_score
+
 # El protocolo experimental que implementamos tiene 2 datasets:
 # 1- Dataset de las señales de EEG
 # 2- El video de las imágenes.
@@ -81,6 +89,7 @@ PREPROCESS_DATASET = False
 PREPROCESSED_DATASET_PATH = 'out/eeg_enriched.csv'
 
 PESTANEO_RAPIDO = "pestaneo_rapido"
+SEED = 17
 
 LABELS = {
     "0:01 - 0:04": PESTANEO_RAPIDO,
@@ -271,62 +280,65 @@ def plot_signal(df: pd.DataFrame, plotname: str):
 
 
 def modelos(df: pd.DataFrame):
-    from sklearn.svm import SVC
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.preprocessing import StandardScaler, LabelEncoder
-    from sklearn.model_selection import train_test_split
-    from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1_score
-
     # Seteo clase binaria
-    df.loc[df.label == PESTANEO_RAPIDO, 'target'] = PESTANEO_RAPIDO
-    df.loc[df.label != PESTANEO_RAPIDO, 'target'] = "otra_cosa"
-    print(df.head())
-
-    # Dropeo features
-    # df.drop(labels=[
-    #     # Estas no aportan info
-    #     # 'timestamp', 'timer', 'counter', 'blinking',
-    #     # Estas tienen demasiados NaN
-    #     'attention_hjorth_complexity', 'meditation_hjorth_complexity',
-    #     # Estas son trampa dejarlas ;)
-    #     # 'label', 'class',
-    # ], axis='columns', inplace=True)
+    df.loc[df.label == PESTANEO_RAPIDO, 'target'] = 1.0
+    df.loc[df.label != PESTANEO_RAPIDO, 'target'] = 0.0
+    print("DF con target", df.head())
 
     # Selecciono features
     features = [f"{band}_{metric}"
-                for band in ['eeg_detrended', 'theta', 'alpha_low', 'alpha_high']
-                for metric in ['std', 'ptp', 'crest', 'hjorth_complexity', 'entropy']
+                for band in ['eeg_detrended', 'theta', 'alpha_low', 'alpha_high', 'beta_low', 'beta_high', 'gamma_low', 'gamma_mid']
+                for metric in ['mean', 'std', 'ptp', 'entropy', 'crest', 'hjorth_activity', 'hjorth_morbidity', 'hjorth_complexity']
                 ]
-    df = df[features + ['target', 'timer']]
-
+    df = df[features + ['label', 'target', 'timer']]
 
     # Dropeo registros sin label o con otros problemas
-    print(df.describe())
+    print("DF shape", df.shape)
     df = df.dropna()
-    print(df.describe())
+    print("DF shape sin NaNs", df.shape)
+
+    # Escalo datos
+    print("DF summary", df.describe())
+    scaler = MinMaxScaler()
+    df.loc[:, features] = scaler.fit_transform(df[features])
+    print("DF escalado summary", df.describe())
 
     # Split train/test
-    train_full = df[(df.timer <= mark_to_ts("5:14"))]
+    CUT = "5:14"
+    train_full = df[(df.timer <= mark_to_ts(CUT)) & (df.label != "tos")]
+    train_counts = train_full.target.value_counts()
+    print("Registros por clase (train), pre-sampling:", train_counts)
+    train_full = train_full.groupby('target', group_keys=False).apply(
+        lambda x: x.sample(train_counts.min(), random_state=SEED))
     train_class = train_full['target']
     train = train_full[features]
-    test_full = df[(df.timer > mark_to_ts("5:14")) &
-              (df.timer < mark_to_ts("10:14"))]
+    test_full = df[(df.timer > mark_to_ts(CUT)) &
+                   (df.timer < mark_to_ts("10:14"))]
+    test_counts = test_full.target.value_counts()
+    print("Registros por clase (test), pre-sampling:", test_counts)
+    test_full = test_full.groupby('target', group_keys=False).apply(
+        lambda x: x.sample(test_counts.min(), random_state=SEED))
     test_class = test_full['target']
     test = test_full[features]
 
+    print("train shape (balanceado)", train.shape)
+    print("test shape (balanceado)", test.shape)
+
     # Inicializo modelos
-    SEED = 17
     models = {
+        "log_rec": LogisticRegression(random_state=SEED),
         "svm_linear": SVC(kernel='linear', random_state=SEED),
         "svm_poly": SVC(kernel='poly', random_state=SEED),
         "svm_rbf": SVC(kernel='rbf', random_state=SEED),
-        "random_forest": RandomForestClassifier(n_estimators=50, random_state=SEED),
+        "random_forest": RandomForestClassifier(n_estimators=100, random_state=SEED),
     }
 
     for name, model in models.items():
+        start = time()
+
         def prefix():
-            return f"{time()} {name}"
+            return f"{time() - start:.2f}s {name}:"
+        print()
         print(prefix(), "About to fit")
         model.fit(train, train_class)
         print(prefix(), "About to predict")
@@ -335,7 +347,7 @@ def modelos(df: pd.DataFrame):
         print(prefix(),
               f"Accurracy score = {accuracy_score(test_class, predictions)}")
         print(prefix(),
-              f"Confusion matrix = {confusion_matrix(test_class, predictions)}")
+              f"Confusion matrix = \n{confusion_matrix(test_class, predictions)}")
 
 
 if __name__ == "__main__":
