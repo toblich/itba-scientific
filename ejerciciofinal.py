@@ -54,23 +54,20 @@ Segunda fecha de entrega: 10 de Febrero 2023
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-import requests
-import math
-import scipy
+
 from collections import Counter
 from scipy.signal import butter, lfilter, detrend
 from io import StringIO
 from scipy.fft import rfft, rfftfreq
+from scipy.stats import entropy
 from time import time
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1_score
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc
 
 # El protocolo experimental que implementamos tiene 2 datasets:
 # 1- Dataset de las señales de EEG
@@ -193,7 +190,7 @@ def peak_to_peak(a):
 
 
 def shannon_entropy(a):
-    return scipy.stats.entropy(list(Counter(a).values()), base=2)
+    return entropy(list(Counter(a).values()), base=2)
 
 
 def hjorth(a):
@@ -327,10 +324,11 @@ def modelos(df: pd.DataFrame):
     # Inicializo modelos
     models = {
         "log_rec": LogisticRegression(random_state=SEED),
+        "random_forest": RandomForestClassifier(n_estimators=100, random_state=SEED),
         "svm_linear": SVC(kernel='linear', random_state=SEED),
         "svm_poly": SVC(kernel='poly', random_state=SEED),
         "svm_rbf": SVC(kernel='rbf', random_state=SEED),
-        "random_forest": RandomForestClassifier(n_estimators=100, random_state=SEED),
+        "neural_net": MLPClassifier(hidden_layer_sizes=(40,), random_state=SEED)
     }
 
     plt.figure()
