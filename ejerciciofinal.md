@@ -1,0 +1,192 @@
+# Ejercicio Final - Tobías Lichtig
+
+## Contexto
+
+Para este trabajo final, se cuenta con un dataset con la señal de un EEG (electroencefalograma) con una frecuencia de muestreo de 512Hz y una duración total de aproximadamente 11 minutos. Durante este periodo, el sujeto en cuestión realiza diversas tareas físicas y mentales. Mediante un video que acompaña a la señal, se puede determinar en qué momento el sujeto está realizando qué tarea.
+
+## Objetivo
+
+El objetivo final es entrenar un clasificador que reconozca cuándo el sujeto está pestañeando rápidamente.
+
+## Desarrollo
+
+Con tal fin, primero se identifican los tiempos entre los que el individuo ejecuta cada tarea. Luego, se generan diversas features a partir del dataset original que permiten estudiar la señal desde diferentes lentes, y se exploran las mismas mediante visualizaciones. Finalmente, se entrenan distintos modelos y se los compara.
+
+### Identificar etapas
+
+Observando el video y sabiendo de antemano la secuencia de etapas, se determina el siguiente intervalo para cada una. Cabe destacar que los tiempos están medidos como offsets desde el comienzo de la señal del dataset, con lo que `00:00` es el comienzo del dataset, habiendo transcurrido 0 minutos y 0 segundos desde el inicio del mismo. El siguiente mapa resume esta clasificación manual:
+
+```python
+PESTANEO_RAPIDO = "pestaneo_rapido"
+LABELS = {
+    "0:01 - 0:04": PESTANEO_RAPIDO,
+    "0:06 - 1:04": "baseline",
+    "1:05 - 1:06": PESTANEO_RAPIDO,
+    "1:08 - 2:10": "tos",
+    "2:11 - 2:13": PESTANEO_RAPIDO,
+    "2:14 - 3:10": "respira_hondo",
+    "3:11 - 3:13": PESTANEO_RAPIDO,
+    "3:14 - 4:09": "respira_rapido",
+    "4:10 - 4:12": PESTANEO_RAPIDO,
+    "4:13 - 5:09": "cuenta_mental",
+    "5:10 - 5:14": PESTANEO_RAPIDO,
+    "5:15 - 6:11": "violeta",
+    "6:12 - 6:15": PESTANEO_RAPIDO,
+    "6:16 - 7:10": "rojo",
+    "7:11 - 7:13": PESTANEO_RAPIDO,
+    "7:14 - 8:13": "sonreir",
+    "8:14 - 8:15": PESTANEO_RAPIDO,
+    "8:16 - 8:37": "desagradable",
+    "8:38 - 10:10": "agradable",
+    "10:12 - 10:13": PESTANEO_RAPIDO,
+    "10:14 - 11:00": "pestaneo_codigo",
+}
+```
+
+### Generar features
+
+Considerando el objetivo del trabajo, se pre-procesa la señal para extraer ciertas bandas de frecuencias que facilitan el análisis del EEG. Las señales generadas son:
+- EEG sin tendencia
+- Ondas theta
+- Ondas alpha bajas
+- Ondas alpha altas
+- Ondas beta bajas
+- Ondas beta altas
+- Ondas gamma bajas
+- Ondas gamma medias
+- Al probar generar las ondas delta, los resultados son extraños (con valores infinitos y `NaN`), con lo que se las descarta.
+
+Además, a cada una de las señales generadas listadas y a las métricas iniciales de atención y meditación presentes junto al EEG, se las procesa para calcular por cada segundo las siguientes métricas:
+- Media
+- Desvío estándar
+- Peak-to-peak
+- Entropía de Shannon
+- Factor de cresta
+- Parámetros de Hjorth (activity, morbidity, complexity)
+
+También se anota cada medición con la clase definida al comienzo. Este preprocesamiento genera como salida, a partir de un dataset de 9.1MB en texto plano, un dataset extendido de 475MB en formato CSV.
+
+```python
+PREPROCESSED_DATASET_PATH = 'out/eeg_enriched.csv'
+
+
+def preprocess():
+    df = pd.read_csv('protocolo/eeg.dat', delimiter=' ', names=[
+        'timestamp', 'counter', 'eeg', 'attention', 'meditation', 'blinking'])
+
+    print('Estructura de la informacion:')
+    print(df.head())
+
+    # Agregar features
+    init_ts = df.timestamp[0]
+    df.loc[:, "timer"] = df.timestamp - init_ts  # Para el eje x
+    df['eeg_detrended'] = detrend(df.eeg)
+    add_band(df, 'eeg_detrended', None, None)
+    add_band(df, 'attention', None, None)
+    add_band(df, 'meditation', None, None)
+    add_band(df, 'theta', 3.5, 6.75)
+    add_band(df, 'alpha_low', 7.5, 9.25)
+    add_band(df, 'alpha_high', 10.0, 11.75)
+    add_band(df, 'beta_low', 13.0, 16.75)
+    add_band(df, 'beta_high', 18.0, 29.75)
+    add_band(df, 'gamma_low', 31.0, 39.75)
+    add_band(df, 'gamma_mid', 41.0, 49.75)
+
+    # Agregar clase
+    for (interval, label) in LABELS.items():
+        start, end = interval.split(" - ")
+        predicate = (
+            df.timer >= mark_to_ts(start)) & (df.timer <= mark_to_ts(end))
+        df.loc[predicate, "label"] = label
+
+    # Persistir
+    df.to_csv(PREPROCESSED_DATASET_PATH, index=False)
+    print('Estructura de la informacion enriquecida:')
+    print(df.head())
+
+
+def mark_to_ts(mark: str):
+    mins, segs = mark.split(":")
+    return int(mins) * 60 + int(segs)
+
+
+def crest_factor(x):
+    return np.max(np.abs(x)) / np.sqrt(np.mean(np.square(x)))
+
+
+def peak_to_peak(a):
+    return abs(np.max(a)) + abs(np.min(a))
+
+
+def shannon_entropy(a):
+    return entropy(list(Counter(a).values()), base=2)
+
+
+def hjorth(a):
+    first_deriv = np.diff(a)
+    second_deriv = np.diff(a, 2)
+
+    var_zero = np.mean(a ** 2)
+    var_d1 = np.mean(first_deriv ** 2)
+    var_d2 = np.mean(second_deriv ** 2)
+
+    activity = var_zero
+    morbidity = np.sqrt(var_d1 / var_zero)
+    complexity = np.sqrt(var_d2 / var_d1) / morbidity
+
+    return activity, morbidity, complexity
+
+
+# Bandas de Frecuencia
+def butter_bandpass(lowcut, highcut, fs, order):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order):
+    b, a = butter_bandpass(lowcut, highcut, fs, order)
+    y = lfilter(b, a, data)
+    return y
+
+
+def add_band(df, name, lowcut, highcut, fs=512, order=5):
+    print(f"======================= ADDING BAND {name} ======================")
+    if lowcut and highcut:
+        df[name] = butter_bandpass_filter(
+            df.eeg_detrended, lowcut, highcut, fs, order)
+
+    grouped = df.groupby(['timestamp'])[name]
+
+    df[f'{name}_mean'] = grouped.transform('mean')
+    df[f'{name}_std'] = grouped.transform('std')
+    df[f'{name}_ptp'] = grouped.transform(peak_to_peak)
+    df[f'{name}_entropy'] = grouped.transform(shannon_entropy)
+    df[f'{name}_crest'] = grouped.transform(crest_factor)
+    df[f'{name}_hjorth_activity'] = grouped.transform(lambda a: hjorth(a)[0])
+    df[f'{name}_hjorth_morbidity'] = grouped.transform(lambda a: hjorth(a)[1])
+    df[f'{name}_hjorth_complexity'] = grouped.transform(lambda a: hjorth(a)[2])
+
+```
+
+### Visualizar las señales
+
+Tanto para el dataset completo como para cada etapa dentro del mismo, se visualizan las señales generadas (sin todas las métricas por segundo, sino las señales base). Cabe destacar que en este paso ya se descatan las señales delta (como fue nombrado anteriormente) y la señal de pestaneo provista por el dispositivo, ya que la misma era constantemente nula. También se excluyen de los gráficos las señales de atención y meditación, ya que no aparentan tener mayor relevancia para este caso y se desea evitar tener demasiadas cosas en un mismo gráfico. A continuación se muestran algunas de las visualizaciones generadas.
+
+![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 1")
+
+
+### Entrenar diferentes modelos y compararlos
+
+## Conclusiones
+
+
+
+-------------
+
+## Anexo
+
+Para obtener el dataset original, descargárselo de [este link](https://drive.google.com/file/d/1ByQDK4ZPxbqw7T17k--avTcgSCCzs3vi/view?usp=sharing)
+Para ver el código completo de este ejercicion, ver [este archivo](https://github.com/toblich/itba-scientific/blob/main/ejerciciofinal.py). Notar que la variable `PREPROCESS_DATASET` marca si se ejecuta solo el pre-procesamiento del dataset, o si se toma del disco el dataset ya preprocesado y se hacen los gráficos y modelos.
