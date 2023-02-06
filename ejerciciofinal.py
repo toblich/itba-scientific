@@ -360,6 +360,7 @@ def modelos(df: pd.DataFrame):
         plt.plot(fpr, tpr, label=f"{name} (AUC={area:.3f})")
 
     plt.legend(loc="lower right")
+    plt.savefig("out/roc.png")
     plt.show()
 
 
