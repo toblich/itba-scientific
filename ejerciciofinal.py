@@ -123,7 +123,7 @@ def main():
     print('Estructura de la informacion enriquecida:')
     print(df.head())
 
-    # plots(df)
+    plots(df)
     modelos(df)
 
 

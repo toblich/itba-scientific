@@ -175,6 +175,54 @@ def add_band(df, name, lowcut, highcut, fs=512, order=5):
 
 Tanto para el dataset completo como para cada etapa dentro del mismo, se visualizan las señales generadas (sin todas las métricas por segundo, sino las señales base). Cabe destacar que en este paso ya se descartan las señales delta (como fue nombrado anteriormente) y la señal de pestañeo provista por el dispositivo, ya que la misma era constantemente nula. También se excluyen de los gráficos las señales de atención y meditación, ya que no aparentan tener mayor relevancia para este caso y se desea evitar tener demasiadas cosas en un mismo gráfico. A continuación se muestran algunas de las visualizaciones generadas.
 
+```python
+def plots(df: pd.DataFrame):
+    plot_signal(df, "general")
+
+    for (interval, label) in LABELS.items():
+        start, end = interval.split(" - ")
+        filtered_signals = df.loc[(df.timer >= mark_to_ts(start)) &
+                                  (df.timer <= mark_to_ts(end))]
+        process_chunk(filtered_signals, label, start, end)
+
+def process_chunk(signals, label, start_mark, end_mark):
+    plot_signal(signals, f"{label} ({start_mark} ~ {end_mark})")
+
+def plot_signal(df: pd.DataFrame, plotname: str):
+    fig, ax = plt.subplots(nrows=4, ncols=2, sharex='col', **
+                           {"figsize": (24, 12), "dpi": 100})
+    fig.suptitle(plotname)
+    fig.supxlabel('t [seg] (medido desde el inicio del dataset)')
+
+    LINEWIDTH = 0.75
+
+    ax[0, 0].plot(df.timer, df.eeg_detrended,
+                  color='steelblue', linewidth=LINEWIDTH)
+    ax[0, 0].set_ylabel('eeg_detrended')
+    ax[1, 0].plot(df.timer, df.theta, color='green', linewidth=LINEWIDTH)
+    ax[1, 0].set_ylabel('theta')
+
+    ax[0, 1].plot(df.timer, df.alpha_low, color='red', linewidth=LINEWIDTH)
+    ax[0, 1].set_ylabel('alpha_low')
+    ax[1, 1].plot(df.timer, df.alpha_high, color='red', linewidth=LINEWIDTH)
+    ax[1, 1].set_ylabel('alpha_high')
+
+    ax[2, 0].plot(df.timer, df.beta_low, color='violet', linewidth=LINEWIDTH)
+    ax[2, 0].set_ylabel('beta_low')
+    ax[3, 0].plot(df.timer, df.beta_high, color='violet', linewidth=LINEWIDTH)
+    ax[3, 0].set_ylabel('beta_high')
+
+    ax[2, 1].plot(df.timer, df.gamma_low, color='orange', linewidth=LINEWIDTH)
+    ax[2, 1].set_ylabel('gamma_low')
+    ax[3, 1].plot(df.timer, df.gamma_mid, color='orange', linewidth=LINEWIDTH)
+    ax[3, 1].set_ylabel('gamma_mid')
+
+    plt.tight_layout()
+    plt.savefig(f"out/fase-{plotname}.png")
+
+    plt.show()
+```
+
 ### Dataset completo (de comienzo a fin)
 
 ![Dataset entero](https://github.com/toblich/itba-scientific/raw/main/out/fase-general.png "Duración completa del dataset")
@@ -213,13 +261,34 @@ Tanto para el dataset completo como para cada etapa dentro del mismo, se visuali
 
 ### Entrenar diferentes modelos y compararlos
 
-Dado que el objetivo es distinguir el pestañeo rápido de las demás acciones, primero se crea una columna en el dataset con la clase binaria: 1 para el pestañeo rápido, 0 para las demás clases. Luego, se eliminan los datos que no entran en ninguna clase (algunos pocos segundos entre etapas a veces) y se eliminaron algunas features que parecen poco relevantes o fallidas, en particular las ondas delta y lo relacionado a la atención y meditación.
+Dado que el objetivo es distinguir el pestañeo rápido de las demás acciones, primero se crea una columna en el dataset con la clase binaria: `1` para el pestañeo rápido, `0` para las demás tareas. Luego, se eliminan los datos que no entran en ninguna clase (algunos pocos segundos entre etapas a veces) y se eliminaron algunas features que parecen poco relevantes o fallidas, en particular las ondas delta y lo relacionado a la atención y meditación. El siguiente paso es escalar los datos mediante un `MinMaxScaler`[^scaler], dado que algunos de los modelos usados son sensibles a la diferencia de escala entre variables.
 
-Luego, se separa el dataset en conjuntos de entrenamiento y prueba. Para ello, se tomaron aproximadamente los primeros 5 minutos del dataset para entrenamiento, y lo restante para testeo, con la salvedad de que se descartaron las etapas de tos y pestañeo código por involucrar también bastante pestañeo, lo que definitivamente resulta confuso para el modelo[^train-tos].
+[^scaler]: Esto surgió de los experimentos previos, en donde la ejecución de algunos modelos generaba warnings al respecto y sugería usar `MinMaxScaler` o `StandardScaler`. Habiendo probado ambos, se obtuvieron mejores resultados con el primero.
+
+Luego, se separa el dataset en conjuntos de entrenamiento y prueba. Para ello, se tomaron aproximadamente los primeros 5 minutos del dataset para entrenamiento, y lo restante para testeo, con la salvedad de que se descartaron las etapas de tos y pestañeo código por involucrar también bastante pestañeo, lo que definitivamente resulta confuso para el modelo[^train-tos]. Dado que en cada conjunto las clases están muy desbalanceadas, ya que hay unos pocos segundos de pestañeo rápido por cada minuto de otra tarea, se hace un muestreo aleatorio de la clase mayoritaria de forma tal de tener misma cantidad de registros de pestañeo rápido (clase `1`) y de las otras (clase `0`).
 
 [^train-tos]: No se incluye en el cuerpo del informe, pero se hicieron experimentos incluyendo la tos en el entrenamiento y los resultados siempre fueron peores.
 
+A continuación, se entrena cada modelo sobre el conjunto de training, se lo prueba contra el conjunto de testing, y se toman algunas métricas de error. En particular, se midió la clasificación por su precisión, su matriz de confusión, y su área bajo la curva ROC.
+
+La siguiente tabla y el gráfico posterior resumen los modelos probados con sus métricas de error
+
+| Modelo                   | Precisión | Matriz de confusión       |
+| ------------------------ | --------- | ------------------------- |
+| Regresión Logística      | 0.8292    | [[3436  190] [1049 2577]] |
+| Random Forest            | 0.6629    | [[3616   10] [2435 1191]] |
+| SVM Lineal               | 0.8333    | [[3434  192] [1017 2609]] |
+| SVM Polinómico (grado 3) | 0.7996    | [[3475  151] [1302 2324]] |
+| SVM Radial (rbf)         | 0.8315    | [[3476  150] [1072 2554]] |
+| Red neuronal[^nn]        | 0.8127    | [[3461  165] [1193 2433]] |
+
+[^nn]: Luego de algunas pruebas manuales con redes de entre una y dos capas ocultas, se terminó eligiendo por una red de 1 capa oculta con 40 nodos en la misma, ya que agregando muchos más nodos se notaba una caída considerable en la performance, debido claramente al overfitting por el tamaño del conjunto de entrenamiento y la gran variabilidad de las redes con muchas neuronas.
+
+![Gráficos ROC](https://github.com/toblich/itba-scientific/raw/main/out/roc.png "Gráficos ROC")
+
 ## Conclusiones
+
+A partir de los resultados obtenidos, el modelo que mejor performa en este caso parece ser el SVM lineal. Sin embargo, el SVM radial también tiene resultados muy similares, y la regresión logística sorprendentemente también arroja resultados decentes. Cabe destacar igual que ningún modelo superó el 83.3% de precisión, lo que implica que, subjetivamente, ninguno es demasiado confiable de todos modos. De todos modos, es sorprendente que el Random Forest arroja los resultados de menor precisión total, pero observando la matriz de confusión se nota que genera muchos falsos negativos pero a su vez es el modelo que menos falsos positivos genera.
 
 -------------
 
