@@ -173,20 +173,58 @@ def add_band(df, name, lowcut, highcut, fs=512, order=5):
 
 ### Visualizar las señales
 
-Tanto para el dataset completo como para cada etapa dentro del mismo, se visualizan las señales generadas (sin todas las métricas por segundo, sino las señales base). Cabe destacar que en este paso ya se descatan las señales delta (como fue nombrado anteriormente) y la señal de pestaneo provista por el dispositivo, ya que la misma era constantemente nula. También se excluyen de los gráficos las señales de atención y meditación, ya que no aparentan tener mayor relevancia para este caso y se desea evitar tener demasiadas cosas en un mismo gráfico. A continuación se muestran algunas de las visualizaciones generadas.
+Tanto para el dataset completo como para cada etapa dentro del mismo, se visualizan las señales generadas (sin todas las métricas por segundo, sino las señales base). Cabe destacar que en este paso ya se descartan las señales delta (como fue nombrado anteriormente) y la señal de pestañeo provista por el dispositivo, ya que la misma era constantemente nula. También se excluyen de los gráficos las señales de atención y meditación, ya que no aparentan tener mayor relevancia para este caso y se desea evitar tener demasiadas cosas en un mismo gráfico. A continuación se muestran algunas de las visualizaciones generadas.
 
-![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 1")
+### Dataset completo (de comienzo a fin)
 
+![Dataset entero](https://github.com/toblich/itba-scientific/raw/main/out/fase-general.png "Duración completa del dataset")
+
+### Primer pestañeo rápido
+
+![Primer pestañeo rápido](https://github.com/toblich/itba-scientific/raw/main/out/fase-pestaneo_rapido%20(0:01%20~%200:04).png "Primer pestañeo rápido")
+
+### Baseline
+
+![Baseline](https://github.com/toblich/itba-scientific/raw/main/out/fase-baseline%20(0:06%20~%201:04).png "Baseline")
+
+### Segundo pestañeo rápido
+
+![Segundo pestañeo rápido](https://github.com/toblich/itba-scientific/raw/main/out/fase-pestaneo_rapido%20(1:05%20~%201:06).png "Segundo pestañeo rápido")
+
+### Tos
+
+![Tos](https://github.com/toblich/itba-scientific/raw/main/out/fase-tos%20(1:08%20~%202:10).png "Tos")
+
+### Tercer pestañeo rápido
+
+![Tercer pestañeo rápido](https://github.com/toblich/itba-scientific/raw/main/out/fase-pestaneo_rapido%20(2:11%20~%202:13).png "Tercer pestañeo rápido")
+
+### Respirar hondo
+
+![Respirar hondo](https://github.com/toblich/itba-scientific/raw/main/out/fase-respira_hondo%20(2:14%20~%203:10).png "Respirar hondo")
+
+### Último pestañeo rápido
+
+![Último pestañeo rápido](https://github.com/toblich/itba-scientific/raw/main/out/fase-pestaneo_rapido%20(10:12%20~%2010:13).png "Último pestañeo rápido")
+
+### Pestañeo código
+
+![Pestañeo código](https://github.com/toblich/itba-scientific/raw/main/out/fase-pestaneo_codigo%20(10:14%20~%2011:00).png "Pestañeo código")
 
 ### Entrenar diferentes modelos y compararlos
 
+Dado que el objetivo es distinguir el pestañeo rápido de las demás acciones, primero se crea una columna en el dataset con la clase binaria: 1 para el pestañeo rápido, 0 para las demás clases. Luego, se eliminan los datos que no entran en ninguna clase (algunos pocos segundos entre etapas a veces) y se eliminaron algunas features que parecen poco relevantes o fallidas, en particular las ondas delta y lo relacionado a la atención y meditación.
+
+Luego, se separa el dataset en conjuntos de entrenamiento y prueba. Para ello, se tomaron aproximadamente los primeros 5 minutos del dataset para entrenamiento, y lo restante para testeo, con la salvedad de que se descartaron las etapas de tos y pestañeo código por involucrar también bastante pestañeo, lo que definitivamente resulta confuso para el modelo[^train-tos].
+
+[^train-tos]: No se incluye en el cuerpo del informe, pero se hicieron experimentos incluyendo la tos en el entrenamiento y los resultados siempre fueron peores.
+
 ## Conclusiones
-
-
 
 -------------
 
 ## Anexo
 
-Para obtener el dataset original, descargárselo de [este link](https://drive.google.com/file/d/1ByQDK4ZPxbqw7T17k--avTcgSCCzs3vi/view?usp=sharing)
-Para ver el código completo de este ejercicion, ver [este archivo](https://github.com/toblich/itba-scientific/blob/main/ejerciciofinal.py). Notar que la variable `PREPROCESS_DATASET` marca si se ejecuta solo el pre-procesamiento del dataset, o si se toma del disco el dataset ya preprocesado y se hacen los gráficos y modelos.
+- Para obtener el dataset original, descargárselo de [este link](https://drive.google.com/file/d/1ByQDK4ZPxbqw7T17k--avTcgSCCzs3vi/view?usp=sharing).
+- Para ver el código completo de este ejercicio, ver [este archivo](https://github.com/toblich/itba-scientific/blob/main/ejerciciofinal.py). Notar que la variable `PREPROCESS_DATASET` marca si se ejecuta solo el pre-procesamiento del dataset, o si se toma del disco el dataset ya pre-procesado y se hacen los gráficos y modelos.
+- Para ver las visualizaciones de todas las etapas, ver las imágenes en [el directorio `out/`](https://github.com/toblich/itba-scientific/tree/main/out)
